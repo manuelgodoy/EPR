@@ -5,12 +5,12 @@ from math import pi
 import matplotlib.pyplot as plt
 from voltages import voltages
 
-NUMBER_OF_POINTS = 50
+NUMBER_OF_POINTS = 200
 RESOLUTION = 0.001
-VOLTAGE_START = 0.73
-TIME_CONSTANT = '3s'
-MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 10
+VOLTAGE_START = 0.65
+TIME_CONSTANT = '1s'
+MODULATION_FREQUENCY = '100'
+WAIT_TIME = 1
 
 sensitivity = ['2e-9','5e-9','10e-9','20e-9','50e-9','100e-9','200e-9','500e-9','1e-6',
                 '2e-6','5e-6','10e-6','20e-6','50e-6','100e-6','200e-6','500e-6','1e-3',
@@ -33,35 +33,25 @@ class Instrument(object):
 
 def sweep(start_voltage):
     time_constant = TIME_CONSTANT
-    x_center = float(lockin.query('OUTP? 1'))
-    y_center = float(lockin.query('OUTP? 2'))
     center_to_db = float(lockin.query('OUTP? 3'))
     center = 10*math.log10(center_to_db*center_to_db/0.050)
-    # g = float(gauss.query('RDGFIELD'))
+    g = float(gauss.query('RDGFIELD'))
     # plt.axis([voltages[0], voltages[-1], 0.5*center, 1.5*center])
-    f, axarr = plt.subplots(3, sharex = True)
-    axarr[0].axis([float(start_voltage), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION, center - 20, center + 40])
-    axarr[0].grid(which = 'both')
-    axarr[1].axis([float(start_voltage), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION, x_center - 0.0001, x_center + 0.0001])
-    axarr[1].grid(which = 'both')
-    axarr[2].axis([float(start_voltage), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION, y_center - 0.0001, y_center + 0.0001])
-    axarr[2].grid(which = 'both')
+    plt.axis([float(start_voltage), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION, center - 20, center + 40])
+    plt.grid(which = 'both')
     plt.ion()
 
-    # plt.axis([float(start_voltage), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION, center - 20, center + 30])
-    # plt.grid(which = 'both')
-    # plt.ion()
-
-    filename = 'EPR_Magnet_'+datetime.datetime.now().strftime("%B %d %Y %H_%M")+'.csv'
+    filename = 'Magnet_Test_100Hz_Oil_'+datetime.datetime.now().strftime("%B %d %Y %H_%M")+'.csv'
 
     time_constant_index = time_constants.index(time_constant)
     lockin.write('OFLT',str(time_constant_index))
-    lockin.write('FREQ','100000')
+    lockin.write('FREQ',MODULATION_FREQUENCY)
     res_freq = signal_gen.query('FREQ')
     amplitude = signal_gen.query('POW')
     tc_index = int(lockin.query('OFLT'))
     tc = time_constants[tc_index]
-    power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
+    power_supply.write('VOLT:OFFS','0')
+    power_supply.write('APPL:SIN',MODULATION_FREQUENCY+', 0.04, 0')
     v_read = power_supply.query('VOLT:OFFS')
     c_read = '0'
     power_supply.write('OUTP','ON')
@@ -72,36 +62,34 @@ def sweep(start_voltage):
         start = time.time()
         for i in xrange(NUMBER_OF_POINTS):
             voltage = i*RESOLUTION+start_voltage
-            power_supply.write('VOLT:OFFS',str(voltage))
+            # power_supply.write('VOLT:OFFS',str(voltage))
+            power_supply.write('APPL:SIN',MODULATION_FREQUENCY+', 0.04, '+str(voltage))
             v_read = power_supply.query('VOLT:OFFS')
-            # g = gauss.query('RDGFIELD')
-            g = 'na'
+            g = gauss.query('RDGFIELD')
             l = lockin.query('SNAP','1,2,3,4')
             sens_index = int(lockin.query('SENS'))
             sens = sensitivity[sens_index]
             to_db = float(l.split(',')[0])
-            y_to_db = float(l.split(',')[1])
             Rto_db = float(l.split(',')[2])
-            y = float(l.split(',')[1])
+            # y = float(l.split(',')[1])
             if abs(abs(Rto_db)-float(sens)) < .25*float(sens): #or abs(abs(y)-float(sens)) < .25*float(sens):
-               lockin.write('SENS',str(sens_index+1))
+                lockin.write('SENS',str(sens_index+1))
             elif abs(Rto_db)/float(sens) < .2: #and abs(y)/float(sens) < .2:
-               lockin.write('SENS',str(sens_index-1))
+                lockin.write('SENS',str(sens_index-1))
             try:
                 db = 10*math.log10(to_db*to_db/0.050)
                 Rdb = 10*math.log10(Rto_db*Rto_db/0.050)
             except:
                 # log.info(to_db)
-                print (to_db)
-            # plt.scatter(float(v_read), Rdb)
-            axarr[0].scatter(float(v_read), Rdb)
-            axarr[1].scatter(float(v_read), to_db)
-            axarr[2].scatter(float(v_read), y_to_db)
+                print to_db
+            plt.scatter(float(v_read), Rdb)
             end = time.time()
             s.writerow([g +',', l+',',str(db)+',',str(Rdb)+',',sens+',',tc+',',res_freq+',',amplitude+',',v_read+',',c_read+',',end-start])
+            # s.writerow([v_read])
             plt.pause(0.05)
             time.sleep(0.95*WAIT_TIME)
         power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
+        # power_supply.write('OUTP','OFF')
 
 
 if __name__ == "__main__":
@@ -111,6 +99,6 @@ if __name__ == "__main__":
         start_voltage = VOLTAGE_START
     lockin = Instrument('GPIB0::8')
     signal_gen = Instrument('GPIB1::7')
-    # gauss = Instrument('GPIB3::12')
+    gauss = Instrument('GPIB3::12')
     power_supply = Instrument('GPIB2::10')
     sweep(start_voltage)

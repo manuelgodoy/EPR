@@ -3,7 +3,7 @@ import sys, csv, time, datetime, math
 import numpy as np
 from math import pi
 from voltages import voltages
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 sensitivity = ['2e-9','5e-9','10e-9','20e-9','50e-9','100e-9','200e-9','500e-9','1e-6',
                 '2e-6','5e-6','10e-6','20e-6','50e-6','100e-6','200e-6','500e-6','1e-3',
@@ -33,29 +33,30 @@ def sweep(time_constant):
 
 
 
-    power_supply.write('VOLT','0')
-    v_read = power_supply.query('VOLT')
-    c_read = power_supply.query('CURR')
-
+    power_supply.write('VOLT:OFFS','0')
+    v_read = power_supply.query('VOLT:OFFS')
+    power_supply.write('OUTP','ON')
+    # c_read = power_supply.query('CURR')
+    c_read = '0.0'
     with open(filename, 'wb') as f:
         s = csv.writer(f, delimiter=' ')
         s.writerow(['Vin,','Field,','Time'])
         start = time.time()
         for i in voltages:
             voltage = i
-            power_supply.write('VOLT',str(voltage))
-            v_read = power_supply.query('VOLT')
+            power_supply.write('VOLT:OFFS',str(voltage))
+            v_read = power_supply.query('VOLT:OFFS')
             g = gauss.query('RDGFIELD')
             plt.scatter(float(v_read), g)
             end = time.time()
             s.writerow([v_read +',', g+',',end-start])
             plt.pause(0.05)
             time.sleep(1.4)
-        power_supply.write('VOLT','0')
+        power_supply.write('VOLT:OFFS','0')
 
-def sweep2(time_constant):
-    # plt.axis([0.8, 1, 1550, 1750])
-    # plt.ion()
+def sweep2(start_voltage):
+    plt.axis([0.7, 1, 1500, 1750])
+    plt.ion()
 
     filename = 'Magnet Characterization_'+datetime.datetime.now().strftime("%B %d %Y %H_%M")+'.csv'
 
@@ -68,26 +69,26 @@ def sweep2(time_constant):
         s = csv.writer(f, delimiter=' ')
         s.writerow(['Vin,','Field,','Time'])
         start = time.time()
-        for i in xrange(110):
-            voltage = i*0.01
+        for i in xrange(200):
+            voltage = i*0.001+start_voltage
             power_supply.write('VOLT:OFFS',str(voltage))
             v_read = power_supply.query('VOLT:OFFS')
-            print v_read
             g = gauss.query('RDGFIELD')
-            # plt.scatter(float(v_read), g)
+            plt.scatter(float(v_read), g)
             end = time.time()
             s.writerow([v_read +',', g+',',end-start])
-            # plt.pause(0.05)
-        power_supply.write('VOLT:OFFS','0')
-        power_supply.write('OUTP','OFF')
+            plt.pause(0.05)
+            time.sleep(0.9)
+        power_supply.write('VOLT:OFFS','0.5')
+        # power_supply.write('OUTP','OFF')
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in time_constants:
-        time_constant = sys.argv[1]
+    if len(sys.argv) > 1:
+        start_voltage = float(sys.argv[1])
     else:
-        time_constant = '3s'
+        start_voltage = 0.7
     # lockin = Instrument('GPIB2::8')
     # signal_gen = Instrument('GPIB1::7')
     gauss = Instrument('GPIB3::12')
     power_supply = Instrument('GPIB2::10')
-    sweep2(time_constant)
+    sweep2(start_voltage)
