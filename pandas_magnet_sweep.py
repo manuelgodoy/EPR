@@ -4,12 +4,15 @@ import numpy as np
 import pandas as pd
 from math import pi, log10
 import matplotlib.pyplot as plt
+import pprint
+pp = pprint.PrettyPrinter(indent = 1)
 # from voltages import voltages
+
 from plotly_settings import s_1, s_2
 
-NUMBER_OF_POINTS = 60
-RESOLUTION = 0.0005
-VOLTAGE_START = 0.745
+NUMBER_OF_POINTS = 80
+RESOLUTION = 0.00025
+VOLTAGE_START = 0.675
 TIME_CONSTANT = '3s'
 MODULATION_FREQUENCY = '100000'
 WAIT_TIME = 3
@@ -49,7 +52,7 @@ def sweep(start_voltage, sample, coil):
 
     time_constant = TIME_CONSTANT
 
-    filename = 'EPR_Magnet_{0}_SmallCoil_VesselShield_{1}_1LNA_'.format(sample, coil)+datetime.datetime.now().strftime("%B %d %Y %H_%M")+'.csv'
+    filename = 'EPR_Magnet_{0}_{1}_'.format(sample, coil)+datetime.datetime.now().strftime("%B %d %Y %H_%M")+'.csv'
 
     time_constant_index = time_constants.index(time_constant)
     lockin.write('OFLT',str(time_constant_index))
@@ -58,47 +61,84 @@ def sweep(start_voltage, sample, coil):
     amplitude = signal_gen.query('POW')
     tc_index = int(lockin.query('OFLT'))
     tc = time_constants[tc_index]
-    v_read = power_supply.query('VOLT:OFFS')
     mod_amplitude = modulation_gen.query('VOLT')
     mod_frequency = modulation_gen.query('FREQ')
 
-    with open(filename, 'wb') as f:
-        start = time.time()
-        s = csv.writer(f, delimiter=' ')
-        s.writerow(['Field,','X,','Y,','R,','Rdb,','Theta,','dB,','Sens,','TC,','ResFreq,','Power,','VMagnet,','ModAmplitude,','ModFrequency,','Time'])
-        for i in xrange(NUMBER_OF_POINTS):
-            voltage = i*RESOLUTION+start_voltage
-            power_supply.write('VOLT:OFFS',str(voltage))
-            v_read = power_supply.query('VOLT:OFFS')
-            # g = gauss.query('RDGFIELD')
-            g = 'na'
-            l = lockin.query('SNAP','1,2,3,4,5')
-            sens_index = int(lockin.query('SENS'))
-            sens = sensitivity[sens_index]
-            to_db = float(l.split(',')[0])
-            y_to_db = float(l.split(',')[1])
-            R_V = float(l.split(',')[2])
-            R = float(l.split(',')[3])
-            if abs(R)-abs(sens) > 11:
-               lockin.write('SENS',str(sens_index-1))
-            elif abs(R)-abs(sens) < 1:
-               lockin.write('SENS',str(sens_index+1))
-            # if abs(abs(R_V)-float(sens)) < .25*float(sens): #or abs(abs(y)-float(sens)) < .25*float(sens):
-            #    lockin.write('SENS',str(sens_index+1))
-            # elif abs(R_V)/float(sens) < .2: #and abs(y)/float(sens) < .2:
-            #    lockin.write('SENS',str(sens_index-1))
-            try:
-                db = 10*math.log10(to_db*to_db/0.050)
-                # Rdb = 10*math.log10(Rto_db*Rto_db/0.050)
-            except:
-                # log.info(to_db)
-                print (to_db)
-            plotly_stream(float(v_read),to_db,y_to_db)
-            # update_plots(float(v_read),R,to_db,y_to_db)
-            end = time.time()
-            s.writerow([g +',', l+',',str(db)+',',str(sens)+',',tc+',',res_freq+',',amplitude+',',v_read+',',mod_amplitude+',',mod_frequency+',',end-start])
-            # plt.pause(0.05)
-            time.sleep(0.95*WAIT_TIME)
+    headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','TC',\
+    'Resonance Freq','Tx Power','Voltage Magnet','Modulation Amplitude',\
+    'Modulation Frequency','Time']
+    data = {key: [] for key in headers}
+    start = time.time()
+    # s = csv.writer(f, delimiter=' ')
+    # s.writerow(['Field,','X,','Y,','R,','Rdb,','Theta,','dB,','Sens,','TC,','ResFreq,','Power,','VMagnet,','ModAmplitude,','ModFrequency,','Time'])
+    for i in xrange(NUMBER_OF_POINTS):
+        voltage = i*RESOLUTION+start_voltage
+        power_supply.write('VOLT:OFFS',str(voltage))
+        # data['Voltage Magnet'].append(power_supply.query('VOLT:OFFS'))
+        # g = gauss.query('RDGFIELD')
+        data['Field'].append('na')
+        # l = lockin.query('SNAP','1,2,3,4').split(',')
+        l = lockin.query('SNAP','1,2,3,4,5').split(',')
+        v_read = power_supply.query('VOLT:OFFS')
+
+        sens_index = int(lockin.query('SENS'))
+        sens = sensitivity[sens_index]
+
+        X = float(l[0])
+        Y = float(l[1])
+        data['X'].append(X)
+        data['Y'].append(Y)
+        R = float(l[2])
+        data['R'].append(R)
+        # RdB = 0
+        RdB = float(l[3])
+        data['Rdb'].append(RdB)
+        data['Theta'].append(l[3])
+
+        # if abs(abs(R)-float(sens)) < .25*float(sens):
+        #     lockin.write('SENS',str(sens_index+1))
+        # elif abs(R)/float(sens) < .2: #and abs(y)/float(sens) < .2:
+        #     lockin.write('SENS',str(sens_index-1))
+
+        if abs(RdB)-abs(sens) > 11:
+           lockin.write('SENS',str(sens_index-1))
+        elif abs(RdB)-abs(sens) < 1:
+           lockin.write('SENS',str(sens_index+1))
+
+        try:
+            db = 10*math.log10(X*X/0.050)
+            # data['XdB'].append(db)
+            # Rdb = 10*math.log10(Rto_db*Rto_db/0.050)
+        except:
+            # log.info(to_db)
+            print (X)
+        plotly_stream(float(v_read),X,Y)
+        # update_plots(float(v_read),RdB,X,Y)
+        end = time.time()
+
+        data['Sens'].append(sens)
+        data['XdB'].append(db)
+        data['Voltage Magnet'].append(v_read)
+        data['Time'].append(end-start)
+        # s.writerow([g +',', l+',',str(db)+',',str(sens)+',',tc+',',res_freq+',',amplitude+',',v_read+',',mod_amplitude+',',mod_frequency+',',end-start])
+        # plt.pause(0.05)
+        time.sleep(0.95*WAIT_TIME)
+
+        data['TC'].append(tc)
+        data['Resonance Freq'].append(res_freq)
+        data['Tx Power'].append(amplitude)
+        data['Modulation Amplitude'].append(mod_amplitude)
+        data['Modulation Frequency'].append(mod_frequency)
+
+    frame = pd.DataFrame(data)
+    frame['X pp'] = frame['X'].max() -  frame['X'].min()
+    frame['Y pp'] = frame['Y'].max() -  frame['Y'].min()
+    frame['Noise'] = frame['X'].tail(5).std()
+    frame['SNR'] = frame['X pp'][0]/frame['Noise'][0]
+    frame['SNRdB'] = 20*math.log10(frame['SNR'][0])
+
+    frame.to_csv(filename, index = False)
+
     power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
     power_supply.write('OUTP','OFF')
 
@@ -127,10 +167,12 @@ if __name__ == "__main__":
         # axarr[2].set_xlim([float(VOLTAGE_START), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION])
         # axarr[2].grid(which = 'both')
         # plt.ion()
+
         s_1.open()
         s_2.open()
         sweep(start_voltage, sample_name, coil_type)
         s_1.close()
         s_2.close()
+
     else:
         print "Enter sample name and voltage level in modulation coil: 'DPPH 10Vpp' or 'AICFU CurrAmp'"
