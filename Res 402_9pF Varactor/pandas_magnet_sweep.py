@@ -10,12 +10,12 @@ pp = pprint.PrettyPrinter(indent = 1)
 
 from plotly_settings import s_1, s_2
 
-NUMBER_OF_POINTS = 50
+NUMBER_OF_POINTS = 40
 RESOLUTION = 0.0005
 VOLTAGE_START = 0.675
 TIME_CONSTANT = '1s'
 MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 1
+WAIT_TIME = 3
 
 # sensitivity = ['2e-9','5e-9','10e-9','20e-9','50e-9','100e-9','200e-9','500e-9','1e-6',
 #                 '2e-6','5e-6','10e-6','20e-6','50e-6','100e-6','200e-6','500e-6','1e-3',

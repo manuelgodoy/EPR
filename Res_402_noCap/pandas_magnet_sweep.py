@@ -4,18 +4,17 @@ import numpy as np
 import pandas as pd
 from math import pi, log10
 import matplotlib.pyplot as plt
-import pprint
-pp = pprint.PrettyPrinter(indent = 1)
 # from voltages import voltages
 
 from plotly_settings import s_1, s_2
+import epr_amplitude
 
-NUMBER_OF_POINTS = 50
+NUMBER_OF_POINTS = 60
 RESOLUTION = 0.0005
-VOLTAGE_START = 0.675
-TIME_CONSTANT = '1s'
+VOLTAGE_START = 0.665
+TIME_CONSTANT = '300ms'
 MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 1
+WAIT_TIME = 0.3
 
 # sensitivity = ['2e-9','5e-9','10e-9','20e-9','50e-9','100e-9','200e-9','500e-9','1e-6',
 #                 '2e-6','5e-6','10e-6','20e-6','50e-6','100e-6','200e-6','500e-6','1e-3',
@@ -52,7 +51,7 @@ def sweep(start_voltage, sample, coil):
 
     time_constant = TIME_CONSTANT
 
-    filename = 'EPR_Magnet_{0}_{1}_'.format(sample, coil)+datetime.datetime.now().strftime("%B %d %Y %H_%M")+'.csv'
+    filename = 'EPR_Magnet_{0}_{1}_'.format(sample, coil)+datetime.datetime.now().strftime("%B %d %Y %H:%M:%S")+'.csv'
 
     time_constant_index = time_constants.index(time_constant)
     lockin.write('OFLT',str(time_constant_index))
@@ -113,7 +112,7 @@ def sweep(start_voltage, sample, coil):
             # log.info(to_db)
             print (X)
         plotly_stream(float(v_read),X,Y)
-        # update_plots(float(v_read),RdB,X,Y)
+        # update_plots(float(v_read),R,X,Y)
         end = time.time()
 
         data['Sens'].append(sens)
@@ -131,16 +130,18 @@ def sweep(start_voltage, sample, coil):
         data['Modulation Frequency'].append(mod_frequency)
 
     frame = pd.DataFrame(data)
-    frame['X pp'] = frame['X'].max() -  frame['X'].min()
-    frame['Y pp'] = frame['Y'].max() -  frame['Y'].min()
-    frame['Noise'] = frame['X'].tail(5).std()
-    frame['SNR'] = frame['X pp'][0]/frame['Noise'][0]
+    frame['R pp'] = epr_amplitude.amplitude(np.array(frame['R']))
+    frame['X pp'] = epr_amplitude.amplitude(np.array(frame['X']))
+    frame['Y pp'] = epr_amplitude.amplitude(np.array(frame['Y']))
+    frame['Noise'] = frame['R'].tail(5).std()
+    frame['SNR'] = frame['R pp'][0]/frame['Noise'][0]
     frame['SNRdB'] = 20*math.log10(frame['SNR'][0])
+    frame['mid point'] = frame['Voltage Magnet'][epr_amplitude.mid_point_index(np.array(frame['R']))]
 
     frame.to_csv(filename, index = False)
 
     power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
-    power_supply.write('OUTP','OFF')
+    # power_supply.write('OUTP','OFF')
 
 def plotly_stream(x,y1,y2):
     s_1.write(dict(x=x, y=y1))
