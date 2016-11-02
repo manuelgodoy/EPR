@@ -4,17 +4,16 @@ import numpy as np
 import pandas as pd
 from math import pi, log10
 import matplotlib.pyplot as plt
-# from voltages import voltages
 
-from plotly_settings import s_1, s_2
+from plotly_settings import s_1, s_2, s_3
 import epr_amplitude
 
-NUMBER_OF_POINTS = 40
-RESOLUTION = 0.0005
-VOLTAGE_START = 0.705
-TIME_CONSTANT = '100ms'
+NUMBER_OF_POINTS = 50
+RESOLUTION = 0.01
+VOLTAGE_START = 0.6
+TIME_CONSTANT = '300ms'
 MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 0.5
+WAIT_TIME = 0.3
 
 # sensitivity = ['2e-9','5e-9','10e-9','20e-9','50e-9','100e-9','200e-9','500e-9','1e-6',
 #                 '2e-6','5e-6','10e-6','20e-6','50e-6','100e-6','200e-6','500e-6','1e-3',
@@ -111,7 +110,7 @@ def sweep(start_voltage, sample, coil):
         except:
             # log.info(to_db)
             print (X)
-        plotly_stream(float(v_read),X,Y)
+        plotly_stream(float(v_read),X,Y,R)
         # update_plots(float(v_read),R,X,Y)
         end = time.time()
 
@@ -143,9 +142,10 @@ def sweep(start_voltage, sample, coil):
     power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
     # power_supply.write('OUTP','OFF')
 
-def plotly_stream(x,y1,y2):
+def plotly_stream(x,y1,y2,y3):
     s_1.write(dict(x=x, y=y1))
     s_2.write(dict(x=x, y=y2))
+    s_3.write(dict(x=x, y=y3))
 
 
 if __name__ == "__main__":
@@ -171,9 +171,11 @@ if __name__ == "__main__":
 
         s_1.open()
         s_2.open()
+        s_3.open()
         sweep(start_voltage, sample_name, coil_type)
         s_1.close()
         s_2.close()
+        s_3.close()
 
     else:
         print "Enter sample name and voltage level in modulation coil: 'DPPH 10Vpp' or 'AICFU CurrAmp'"
