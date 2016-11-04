@@ -1,23 +1,40 @@
+import visa
 import sys, csv, time, datetime, math
 import numpy as np
 import pandas as pd
 from math import pi, log10
-from epr_signal import EPR
-from instrument_control import Instrument, sensitivity, time_constants
+import matplotlib.pyplot as plt
 
-PLOTLY = True
+from plotly_settings import s_1, s_2, s_3
+import epr_amplitude
 
-if PLOTLY:
-    from plotly_settings import s_1, s_2, s_3
-else:
-    import matplotlib.pyplot as plt
-
-NUMBER_OF_POINTS = 60
-RESOLUTION = 0.0005
-VOLTAGE_START = 0.7
+NUMBER_OF_POINTS = 50
+RESOLUTION = 0.01
+VOLTAGE_START = 0.6
 TIME_CONSTANT = '300ms'
 MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 0.5
+WAIT_TIME = 0.3
+
+# sensitivity = ['2e-9','5e-9','10e-9','20e-9','50e-9','100e-9','200e-9','500e-9','1e-6',
+#                 '2e-6','5e-6','10e-6','20e-6','50e-6','100e-6','200e-6','500e-6','1e-3',
+#                 '2e-3','5e-3','10e-3','20e-3','50e-3','100e-3','200e-3','500e-3','1']
+sensitivity = [-127,-117,-107,-97,-87,-77,-67,-57,-47,-37,-27,-17,-7,3,13]
+time_constants = ['100us','300us','1ms','3ms','10ms','30ms','100ms','300ms',
+                    '1s','3s','10s','30s','100s','300s','1ks','3ks','10ks','30ks']
+
+
+
+class Instrument(object):
+    def __init__(self,address):
+        self.resource = visa.ResourceManager().open_resource(address)
+
+    def query(self, command, *args, **kwargs):
+        if args:
+            return self.resource.query(command+'? '+args[0]).strip('\r').strip('\n')
+        return self.resource.query(command+'?').strip('\r').strip('\n')
+
+    def write(self, command, value):
+        return self.resource.write(command+ ' ' +value)
 
 def update_plots(x, R,to_db,y_to_db):
     axarr[0].scatter(x, R)
@@ -25,19 +42,15 @@ def update_plots(x, R,to_db,y_to_db):
     axarr[2].scatter(x, y_to_db)
     plt.pause(0.01)
 
-def plotly_stream(x,y1,y2,y3):
-    s_1.write(dict(x=x, y=y1))
-    s_2.write(dict(x=x, y=y2))
-    s_3.write(dict(x=x, y=y3))
 
-def sweep(start_voltage, sample):
+def sweep(start_voltage, sample, coil):
     # Power Supply on before to allow magnet to start
     power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
     power_supply.write('OUTP','ON')
 
     time_constant = TIME_CONSTANT
 
-    filename = 'EPR_{0}_'.format(sample)+datetime.datetime.now().strftime("%B %d %Y %H:%M:%S")+'.csv'
+    filename = 'EPR_Magnet_{0}_{1}_'.format(sample, coil)+datetime.datetime.now().strftime("%B %d %Y %H:%M:%S")+'.csv'
 
     time_constant_index = time_constants.index(time_constant)
     lockin.write('OFLT',str(time_constant_index))
@@ -49,15 +62,19 @@ def sweep(start_voltage, sample):
     mod_amplitude = modulation_gen.query('VOLT')
     mod_frequency = modulation_gen.query('FREQ')
 
-    headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','Voltage Magnet','Time']
+    headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','TC',\
+    'Resonance Freq','Tx Power','Voltage Magnet','Modulation Amplitude',\
+    'Modulation Frequency','Time']
     data = {key: [] for key in headers}
     start = time.time()
+    # s = csv.writer(f, delimiter=' ')
+    # s.writerow(['Field,','X,','Y,','R,','Rdb,','Theta,','dB,','Sens,','TC,','ResFreq,','Power,','VMagnet,','ModAmplitude,','ModFrequency,','Time'])
     for i in xrange(NUMBER_OF_POINTS):
         voltage = i*RESOLUTION+start_voltage
         power_supply.write('VOLT:OFFS',str(voltage))
         # data['Voltage Magnet'].append(power_supply.query('VOLT:OFFS'))
         # g = gauss.query('RDGFIELD')
-        data['Field'].append('NaN')
+        data['Field'].append('na')
         # l = lockin.query('SNAP','1,2,3,4').split(',')
         l = lockin.query('SNAP','1,2,3,4,5').split(',')
         v_read = power_supply.query('VOLT:OFFS')
@@ -66,9 +83,9 @@ def sweep(start_voltage, sample):
 
         X = float(l[0])
         Y = float(l[1])
-        R = float(l[2])
         data['X'].append(X)
         data['Y'].append(Y)
+        R = float(l[2])
         data['R'].append(R)
         # RdB = 0
         RdB = float(l[3])
@@ -104,33 +121,37 @@ def sweep(start_voltage, sample):
         # plt.pause(0.05)
         time.sleep(0.95*WAIT_TIME)
 
+        data['TC'].append(tc)
+        data['Resonance Freq'].append(res_freq)
+        data['Tx Power'].append(amplitude)
+        data['Modulation Amplitude'].append(mod_amplitude)
+        data['Modulation Frequency'].append(mod_frequency)
+
     frame = pd.DataFrame(data)
-    frame['TC']= pd.Series(tc)
-    frame['Resonance Freq'] = pd.Series(res_freq)
-    frame['Tx Power'] = pd.Series(amplitude)
-    frame['Modulation Amplitude'] = pd.Series(mod_amplitude)
-    frame['Modulation Frequency'] = pd.Series(mod_frequency)
-    x = EPR(frame['X'])
-    y = EPR(frame['Y'])
-    r = EPR(frame['R'])
-    frame['R pp'] = pd.Series(r.amplitude)
-    frame['X pp'] = pd.Series(x.amplitude)
-    frame['Y pp'] = pd.Series(y.amplitude)
-    frame['Noise'] = pd.Series(r.noise())
-    frame['SNR'] = pd.Series(r.amplitude/r.noise())
-    frame['SNRdB'] = pd.Series(20*math.log10(frame['SNR'][0]))
-    frame['mid point'] = pd.Series(frame['Voltage Magnet'][x.mid_point_index()])
+    frame['R pp'] = epr_amplitude.amplitude(np.array(frame['R']))
+    frame['X pp'] = epr_amplitude.amplitude(np.array(frame['X']))
+    frame['Y pp'] = epr_amplitude.amplitude(np.array(frame['Y']))
+    frame['Noise'] = frame['R'].tail(5).std()
+    frame['SNR'] = frame['R pp'][0]/frame['Noise'][0]
+    frame['SNRdB'] = 20*math.log10(frame['SNR'][0])
+    frame['mid point'] = frame['Voltage Magnet'][epr_amplitude.mid_point_index(np.array(frame['X']))]
 
     frame.to_csv(filename, index = False)
 
     power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
     # power_supply.write('OUTP','OFF')
 
+def plotly_stream(x,y1,y2,y3):
+    s_1.write(dict(x=x, y=y1))
+    s_2.write(dict(x=x, y=y2))
+    s_3.write(dict(x=x, y=y3))
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         start_voltage = VOLTAGE_START
         sample_name = sys.argv[1]
-        # coil_type = sys.argv[2]
+        coil_type = sys.argv[2]
         try:
             lockin = Instrument('GPIB0::8')
             signal_gen = Instrument('GPIB1::7')
@@ -138,24 +159,22 @@ if __name__ == "__main__":
             power_supply = Instrument('GPIB2::10')
         except Exception as e:
             raise e
+        # f, axarr = plt.subplots(3, sharex = True)
+        # axarr[0].set_xlim([float(VOLTAGE_START), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION])
+        # axarr[0].grid(which = 'both')
+        # axarr[1].set_xlim([float(VOLTAGE_START), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION])
+        # axarr[1].grid(which = 'both')
+        # axarr[2].set_xlim([float(VOLTAGE_START), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION])
+        # axarr[2].grid(which = 'both')
+        # plt.ion()
 
-        if PLOTLY:
-            s_1.open()
-            s_2.open()
-            s_3.open()
-            sweep(start_voltage, sample_name)
-            s_1.close()
-            s_2.close()
-            s_3.close()
-        else:
-            f, axarr = plt.subplots(3, sharex = True)
-            # axarr[0].set_xlim([float(VOLTAGE_START), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION])
-            # axarr[0].grid(which = 'both')
-            # axarr[1].set_xlim([float(VOLTAGE_START), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION])
-            # axarr[1].grid(which = 'both')
-            # axarr[2].set_xlim([float(VOLTAGE_START), float(start_voltage)+NUMBER_OF_POINTS*RESOLUTION])
-            # axarr[2].grid(which = 'both')
-            plt.ion()
-            sweep(start_voltage, sample_name)
+        s_1.open()
+        s_2.open()
+        s_3.open()
+        sweep(start_voltage, sample_name, coil_type)
+        s_1.close()
+        s_2.close()
+        s_3.close()
+
     else:
-        print "Enter sample name in modulation coil: 'DPPH' or 'AICFU'"
+        print "Enter sample name and voltage level in modulation coil: 'DPPH 10Vpp' or 'AICFU CurrAmp'"
