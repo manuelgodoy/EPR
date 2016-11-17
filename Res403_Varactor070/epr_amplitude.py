@@ -1,29 +1,38 @@
-from scipy.signal import argrelextrema
+from scipy.signal import argrelextrema, savgol_filter
 import datetime
 import numpy as np
+import pandas as pd
+
+def SW_clean(signal):
+    """Function to filter the signal from the sensorwise output"""
+    data = signal['Megnet Control(V)'].duplicated() == False
+    aja = []
+    for i in xrange(len(signal[data].index.values)-1):
+        aja.append(signal['I (uV)'][signal[data].index.values[i]:signal[data].index.values[i+1]-1].mean())
+    return np.array(aja)
 
 class EPR(object):
     """This is an object for the EPR signal, the EPR Signal must be a list """
     def __init__(self, signal):
         self.signal = np.array(signal)
         self.time = datetime.datetime.now().strftime("%B %d %Y %H:%M:%S")
-        # self.maxima = None
-        # self.minima = None
-        # self.amplitude = None
+        self.maxima = self._set_maxima()
+        self.minima = self._set_minima()
+        self.amplitude = self._set_amplitude()
 
-    def set_maxima(self):
+    def _set_maxima(self):
         # for local maxima
         indices_max = argrelextrema(self.signal, np.greater)
         self.maxima = self.signal[indices_max[0]].max()
         return self.maxima
 
-    def set_minima(self):
+    def _set_minima(self):
         # for local minima
         indices_min = argrelextrema(self.signal, np.less)
         self.minima = self.signal[indices_min[0]].min()
         return self.minima
 
-    def set_amplitude(self):
+    def _set_amplitude(self):
         self.amplitude = self.maxima - self.minima
         return self.amplitude
 
@@ -60,6 +69,10 @@ class EPR(object):
         measures their std dev. A phase difference at the mixer may skey this value
         """
         return self.signal[:5].std()
+
+    def s_filter(self, window = 19, polynomial = 9):
+        # self.signal = savgol_filter(self.signal, window, polynomial)
+        return savgol_filter(self.signal, window, polynomial)
 
 def peaks(signal):
     """signal must be a np array"""
