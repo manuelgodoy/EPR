@@ -3,7 +3,9 @@ import numpy as np
 import pandas as pd
 from math import pi, log10
 from epr_signal import EPR
-from instrument_control import Instrument, sensitivity, time_constants
+from instrument_control import Instrument, sensitivity, time_constants_lowfreqlockin
+
+time_constants = time_constants_lowfreqlockin
 
 PLOTLY = True
 
@@ -12,12 +14,12 @@ if PLOTLY:
 else:
     import matplotlib.pyplot as plt
 
-NUMBER_OF_POINTS = 60
+NUMBER_OF_POINTS = 30
 RESOLUTION = 0.0005
-VOLTAGE_START = 0.7
-TIME_CONSTANT = '300ms'
+VOLTAGE_START = 0.705
+TIME_CONSTANT = '1s'
 MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 0.5
+WAIT_TIME = 1
 
 def update_plots(x, R,to_db,y_to_db):
     axarr[0].scatter(x, R)
@@ -42,14 +44,14 @@ def sweep(start_voltage, sample):
     time_constant_index = time_constants.index(time_constant)
     lockin.write('OFLT',str(time_constant_index))
     lockin.write('FREQ','100000')
-    res_freq = signal_gen.query('FREQ')
-    amplitude = signal_gen.query('POW')
+    # res_freq = signal_gen.query('FREQ')
+    # amplitude = signal_gen.query('POW')
     tc_index = int(lockin.query('OFLT'))
     tc = time_constants[tc_index]
-    mod_amplitude = modulation_gen.query('VOLT')
-    mod_frequency = modulation_gen.query('FREQ')
-
-    headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','Voltage Magnet','Time']
+    # mod_amplitude = modulation_gen.query('VOLT')
+    # mod_frequency = modulation_gen.query('FREQ')
+    headers = ['Field','X','Y','R','Theta','XdB','Sens','Voltage Magnet','Time']
+    # headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','Voltage Magnet','Time']
     data = {key: [] for key in headers}
     start = time.time()
     for i in xrange(NUMBER_OF_POINTS):
@@ -58,8 +60,8 @@ def sweep(start_voltage, sample):
         # data['Voltage Magnet'].append(power_supply.query('VOLT:OFFS'))
         # g = gauss.query('RDGFIELD')
         data['Field'].append('NaN')
-        # l = lockin.query('SNAP','1,2,3,4').split(',')
-        l = lockin.query('SNAP','1,2,3,4,5').split(',')
+        l = lockin.query('SNAP','1,2,3,4').split(',')
+        # l = lockin.query('SNAP','1,2,3,4,5').split(',')
         v_read = power_supply.query('VOLT:OFFS')
         sens_index = int(lockin.query('SENS'))
         sens = sensitivity[sens_index]
@@ -71,19 +73,19 @@ def sweep(start_voltage, sample):
         data['Y'].append(Y)
         data['R'].append(R)
         # RdB = 0
-        RdB = float(l[3])
-        data['Rdb'].append(RdB)
+        # RdB = float(l[3])
+        # data['Rdb'].append(RdB)
         data['Theta'].append(l[3])
 
-        # if abs(abs(R)-float(sens)) < .25*float(sens):
-        #     lockin.write('SENS',str(sens_index+1))
-        # elif abs(R)/float(sens) < .2: #and abs(y)/float(sens) < .2:
-        #     lockin.write('SENS',str(sens_index-1))
+        if abs(abs(R)-float(sens)) < .25*float(sens):
+            lockin.write('SENS',str(sens_index+1))
+        elif abs(R)/float(sens) < .2: #and abs(y)/float(sens) < .2:
+            lockin.write('SENS',str(sens_index-1))
 
-        if abs(RdB)-abs(sens) > 11:
-           lockin.write('SENS',str(sens_index-1))
-        elif abs(RdB)-abs(sens) < 1:
-           lockin.write('SENS',str(sens_index+1))
+        # if abs(RdB)-abs(sens) > 11:
+        #    lockin.write('SENS',str(sens_index-1))
+        # elif abs(RdB)-abs(sens) < 1:
+        #    lockin.write('SENS',str(sens_index+1))
 
         try:
             db = 10*math.log10(X*X/0.050)
@@ -92,8 +94,12 @@ def sweep(start_voltage, sample):
         except:
             # log.info(to_db)
             print (X)
-        plotly_stream(float(v_read),X,Y,R)
-        # update_plots(float(v_read),R,X,Y)
+
+        if PLOTLY:
+            plotly_stream(float(v_read),X,Y,R)
+        else:
+            update_plots(float(v_read),R,X,Y)
+
         end = time.time()
 
         data['Sens'].append(sens)
@@ -106,10 +112,10 @@ def sweep(start_voltage, sample):
 
     frame = pd.DataFrame(data)
     frame['TC']= pd.Series(tc)
-    frame['Resonance Freq'] = pd.Series(res_freq)
-    frame['Tx Power'] = pd.Series(amplitude)
-    frame['Modulation Amplitude'] = pd.Series(mod_amplitude)
-    frame['Modulation Frequency'] = pd.Series(mod_frequency)
+    # frame['Resonance Freq'] = pd.Series(res_freq)
+    # frame['Tx Power'] = pd.Series(amplitude)
+    # frame['Modulation Amplitude'] = pd.Series(mod_amplitude)
+    # frame['Modulation Frequency'] = pd.Series(mod_frequency)
     x = EPR(frame['X'])
     y = EPR(frame['Y'])
     r = EPR(frame['R'])
@@ -133,9 +139,9 @@ if __name__ == "__main__":
         # coil_type = sys.argv[2]
         try:
             lockin = Instrument('GPIB0::8')
-            signal_gen = Instrument('GPIB1::7')
-            modulation_gen = Instrument('GPIB3::2')
-            power_supply = Instrument('GPIB2::10')
+            # signal_gen = Instrument('GPIB1::7')
+            # modulation_gen = Instrument('GPIB3::2')
+            power_supply = Instrument('GPIB1::10')
         except Exception as e:
             raise e
 
