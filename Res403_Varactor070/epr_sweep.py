@@ -14,7 +14,7 @@ if PLOTLY:
 else:
     import matplotlib.pyplot as plt
 
-NUMBER_OF_POINTS = 30
+NUMBER_OF_POINTS = 40
 RESOLUTION = 0.0005
 VOLTAGE_START = 0.705
 TIME_CONSTANT = '1s'
@@ -60,9 +60,10 @@ def sweep(start_voltage, sample):
         # data['Voltage Magnet'].append(power_supply.query('VOLT:OFFS'))
         # g = gauss.query('RDGFIELD')
         data['Field'].append('NaN')
-        l = lockin.query('SNAP','1,2,3,4').split(',')
-        # l = lockin.query('SNAP','1,2,3,4,5').split(',')
-        v_read = power_supply.query('VOLT:OFFS')
+
+        # l = lockin.query('SNAP','1,2,3,4').split(',')
+        l = lockin.query('SNAP','1,2,3,4,5').split(',')
+        # v_read = power_supply.query('VOLT:OFFS')
         sens_index = int(lockin.query('SENS'))
         sens = sensitivity[sens_index]
 
@@ -104,7 +105,7 @@ def sweep(start_voltage, sample):
 
         data['Sens'].append(sens)
         data['XdB'].append(db)
-        data['Voltage Magnet'].append(v_read)
+        data['Voltage Magnet'].append(voltage)
         data['Time'].append(end-start)
         # s.writerow([g +',', l+',',str(db)+',',str(sens)+',',tc+',',res_freq+',',amplitude+',',v_read+',',mod_amplitude+',',mod_frequency+',',end-start])
         # plt.pause(0.05)
@@ -112,6 +113,7 @@ def sweep(start_voltage, sample):
 
     frame = pd.DataFrame(data)
     frame['TC']= pd.Series(tc)
+
     # frame['Resonance Freq'] = pd.Series(res_freq)
     # frame['Tx Power'] = pd.Series(amplitude)
     # frame['Modulation Amplitude'] = pd.Series(mod_amplitude)
@@ -130,7 +132,7 @@ def sweep(start_voltage, sample):
     frame.to_csv(filename, index = False)
 
     power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
-    # power_supply.write('OUTP','OFF')
+    power_supply.write('OUTP','OFF')
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

@@ -12,12 +12,12 @@ if PLOTLY:
 else:
     import matplotlib.pyplot as plt
 
-NUMBER_OF_POINTS = 60
-RESOLUTION = 0.0005
-VOLTAGE_START = 0.72
-TIME_CONSTANT = '300ms'
+NUMBER_OF_POINTS = 200
+RESOLUTION = 0.005
+VOLTAGE_START = 0.02
+TIME_CONSTANT = '30ms'
 MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 0.5
+WAIT_TIME = 0.1
 
 def update_plots(x, R,to_db,y_to_db):
     axarr[0].scatter(x, R)
@@ -32,8 +32,8 @@ def plotly_stream(x,y1,y2,y3):
 
 def sweep(start_voltage, sample):
     # Power Supply on before to allow magnet to start
-    power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
-    power_supply.write('OUTP','ON')
+    # power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
+    # power_supply.write('OUTP','ON')
 
     time_constant = TIME_CONSTANT
 
@@ -42,21 +42,22 @@ def sweep(start_voltage, sample):
     time_constant_index = time_constants.index(time_constant)
     lockin.write('OFLT',str(time_constant_index))
     lockin.write('FREQ','100000')
-    res_freq = signal_gen.query('FREQ')
-    amplitude = signal_gen.query('POW')
+    # res_freq = signal_gen.query('FREQ')
+    # amplitude = signal_gen.query('POW')
     tc_index = int(lockin.query('OFLT'))
     tc = time_constants[tc_index]
-    mod_amplitude = modulation_gen.query('VOLT')
-    mod_frequency = modulation_gen.query('FREQ')
+    # mod_amplitude = modulation_gen.query('VOLT')
+    # mod_frequency = modulation_gen.query('FREQ')
 
     headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','Voltage Magnet','Time']
     data = {key: [] for key in headers}
     start = time.time()
     for i in xrange(NUMBER_OF_POINTS):
         voltage = i*RESOLUTION+start_voltage
-        power_supply.write('VOLT:OFFS',str(voltage))
-        # data['Voltage Magnet'].append(power_supply.query('VOLT:OFFS'))
+        # power_supply.write('VOLT:OFFS',str(voltage))
+
         # g = gauss.query('RDGFIELD')
+
         data['Field'].append('NaN')
         # l = lockin.query('SNAP','1,2,3,4').split(',')
         l = lockin.query('SNAP','1,2,3,4,5').split(',')
@@ -123,7 +124,7 @@ def sweep(start_voltage, sample):
 
     frame.to_csv(filename, index = False)
 
-    power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
+    # power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
     # power_supply.write('OUTP','OFF')
 
 if __name__ == "__main__":
@@ -133,9 +134,9 @@ if __name__ == "__main__":
         # coil_type = sys.argv[2]
         try:
             lockin = Instrument('GPIB0::8')
-            signal_gen = Instrument('GPIB1::7')
-            modulation_gen = Instrument('GPIB3::2')
-            power_supply = Instrument('GPIB2::10')
+            # signal_gen = Instrument('GPIB1::7')
+            # modulation_gen = Instrument('GPIB3::2')
+            # power_supply = Instrument('GPIB2::10')
         except Exception as e:
             raise e
 
