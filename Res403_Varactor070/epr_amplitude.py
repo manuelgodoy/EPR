@@ -2,6 +2,7 @@ from scipy.signal import argrelextrema, savgol_filter
 import datetime
 import numpy as np
 import pandas as pd
+import sys
 
 def SW_clean(signal):
     """Function to filter the signal from the sensorwise output"""
@@ -11,11 +12,50 @@ def SW_clean(signal):
         aja.append(signal['I (uV)'][signal[data].index.values[i]:signal[data].index.values[i+1]-1].mean())
     return np.array(aja)
 
+def SW_width(signal):
+    """Function to filter the signal from the sensorwise output"""
+    data = signal['Megnet Control(V)'].duplicated() == False
+    df = pd.DataFrame()
+    epr_signal = []
+    magnetic_field = []
+    for i in xrange(len(signal[data].index.values)-1):
+        epr_signal.append(signal['I (uV)'][signal[data].index.values[i]:signal[data].index.values[i+1]-1].mean())
+        magnetic_field.append(signal['Megnet Control(V)'][signal[data].index.values[i]])
+    df['EPR'] = np.array(epr_signal)
+    df['Field'] = np.array(magnetic_field)
+    return df
+
+def analysis(sample):
+    import glob
+    data = []
+    main_path = "/Users/manuelgodoy/Dropbox/Projects/Cenovus Weyburn Trials/Data/"
+    path = "/Users/manuelgodoy/Dropbox/Projects/Cenovus Weyburn Trials/Data/*_{0}.csv".format(sample)
+    df = pd.DataFrame()
+    for filename in glob.glob(path):
+        # print filename
+        d = pd.read_csv(filename)
+        d_clean = EPR(SW_clean(d))
+        d_filtered = EPR(d_clean.s_filter())
+        data.append(d_filtered)
+        df[filename.strip(main_path)] = d_filtered.removeDC()
+
+    average = []
+    for i in data:
+        average.append(i.amplitude)
+
+    df['Vpp Average'] = pd.DataFrame(average).mean()
+    df['Error'] = pd.DataFrame(average).std()
+
+    df.to_csv("/Users/manuelgodoy/Dropbox/Projects/Cenovus Weyburn Trials/Data/{0}.csv".format(sample), index = False)
+    return sum(average)/float(len(average))
+
+
 class EPR(object):
     """This is an object for the EPR signal, the EPR Signal must be a list """
-    def __init__(self, signal):
+    def __init__(self, signal, magnetic_field = None):
         self.signal = np.array(signal)
         self.time = datetime.datetime.now().strftime("%B %d %Y %H:%M:%S")
+        self.magnetic_field = magnetic_field
         self.maxima = self._set_maxima()
         self.minima = self._set_minima()
         self.amplitude = self._set_amplitude()
@@ -71,29 +111,23 @@ class EPR(object):
         return self.signal[:5].std()
 
     def s_filter(self, window = 19, polynomial = 9):
-        # self.signal = savgol_filter(self.signal, window, polynomial)
+        self.signal_filtered = savgol_filter(self.signal, window, polynomial)
         return savgol_filter(self.signal, window, polynomial)
 
-def peaks(signal):
-    """signal must be a np array"""
+    def removeDC(self):
+        m = self.signal.mean()
+        self.signal_no_DC = self.signal - m
+        return self.signal_no_DC
 
-    # for local maxima
-    indices_max = argrelextrema(signal, np.greater)
+    def width(self):
+        max_ind = np.where(self.signal == self.maxima)[0][0]
+        min_ind = np.where(self.signal == self.minima)[0][0]
+        self.width_ = np.abs(self.magnetic_field[max_ind] - self.magnetic_field[min_ind])
+        return self.width_
 
-    # for local minima
-    indices_min = argrelextrema(signal, np.less)
 
-    maxima = signal[indices_max[0]].max()
-    minima = signal[indices_min[0]].min()
 
-    return maxima, minima
-
-def amplitude(signal):
-    maxima, minima = peaks(signal)
-    return maxima - minima
-
-def mid_point_index(signal):
-    maxima, minima = peaks(signal)
-    max_ind = np.where(signal == maxima)[0][0]
-    min_ind = np.where(signal == minima)[0][0]
-    return abs((max_ind+min_ind)/2)
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        sample = sys.argv[1]
+    print analysis(sample)
