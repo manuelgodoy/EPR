@@ -3,6 +3,7 @@ import plotly.plotly as py
 import plotly.tools as tls
 import plotly.graph_objs as go
 
+
 plotly.tools.set_credentials_file(username='microsilicon', api_key='ekrc27ruwb')
 plotly.tools.set_config_file(world_readable=False,
                              sharing='private')
@@ -55,7 +56,7 @@ fig.append_trace(trace1, 1, 1)
 fig.append_trace(trace2, 2, 1)
 fig.append_trace(trace3, 3, 1)
 fig['layout'].update(showlegend=False, title='EPR')
-py.iplot(fig, filename='EPR Plots')
+py.plot(fig, filename='EPR Plots')
 
 s_1 = py.Stream(stream_id=token_1)
 s_2 = py.Stream(stream_id=token_2)
