@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 from math import pi, log10
 from epr_signal import EPR
-from instrument_control import Instrument, sensitivity, time_constants_lowfreqlockin
+from instrument_control import Instrument, sensitivity, time_constants
 
-time_constants = time_constants_lowfreqlockin
+# time_constants = time_constants
 
 PLOTLY = True
 
@@ -14,12 +14,12 @@ if PLOTLY:
 else:
     import matplotlib.pyplot as plt
 
-NUMBER_OF_POINTS = 40
+NUMBER_OF_POINTS = 24
 RESOLUTION = 0.0005
-VOLTAGE_START = 0.705
+VOLTAGE_START = 0.698
 TIME_CONSTANT = '1s'
 MODULATION_FREQUENCY = '100000'
-WAIT_TIME = 1
+WAIT_TIME = 3
 
 def update_plots(x, R,to_db,y_to_db):
     axarr[0].scatter(x, R)
@@ -39,7 +39,8 @@ def sweep(start_voltage, sample):
 
     time_constant = TIME_CONSTANT
 
-    filename = 'EPR_{0}_'.format(sample)+datetime.datetime.now().strftime("%B %d %Y %H:%M:%S")+'.csv'
+    filename = 'EPR_{0}_'.format(sample)+datetime.datetime.now().strftime("%B %d %Y %H%M%S")+'.csv'
+    filename_2 = 'EPR_{0}_Testing_'.format(sample)+datetime.datetime.now().strftime("%B %d %Y %H%M%S")+'.csv'
 
     time_constant_index = time_constants.index(time_constant)
     lockin.write('OFLT',str(time_constant_index))
@@ -50,11 +51,19 @@ def sweep(start_voltage, sample):
     tc = time_constants[tc_index]
     # mod_amplitude = modulation_gen.query('VOLT')
     # mod_frequency = modulation_gen.query('FREQ')
-    headers = ['Field','X','Y','R','Theta','XdB','Sens','Voltage Magnet','Time']
-    # headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','Voltage Magnet','Time']
+    # headers = ['Field','X','Y','R','Theta','XdB','Sens','Voltage Magnet','Time'] # For LF lockin
+    headers = ['Field','X','Y','R','Rdb','Theta','XdB','Sens','Voltage Magnet','Time']
     data = {key: [] for key in headers}
+
+    ## CODE to check noise in each sample
+    headers_2 = ['R','Voltage Magnet']
+    data_2 = {key: [] for key in headers_2}
+    lockin.write('SRAT','13')
+
     start = time.time()
     for i in xrange(NUMBER_OF_POINTS):
+
+        lockin.write('STRT')
         voltage = i*RESOLUTION+start_voltage
         power_supply.write('VOLT:OFFS',str(voltage))
         # data['Voltage Magnet'].append(power_supply.query('VOLT:OFFS'))
@@ -64,6 +73,9 @@ def sweep(start_voltage, sample):
         # l = lockin.query('SNAP','1,2,3,4').split(',')
         l = lockin.query('SNAP','1,2,3,4,5').split(',')
         # v_read = power_supply.query('VOLT:OFFS')
+
+        lockin.write('STRT')
+
         sens_index = int(lockin.query('SENS'))
         sens = sensitivity[sens_index]
 
@@ -74,19 +86,19 @@ def sweep(start_voltage, sample):
         data['Y'].append(Y)
         data['R'].append(R)
         # RdB = 0
-        # RdB = float(l[3])
-        # data['Rdb'].append(RdB)
+        RdB = float(l[3])
+        data['Rdb'].append(RdB)
         data['Theta'].append(l[3])
 
-        if abs(abs(R)-float(sens)) < .25*float(sens):
-            lockin.write('SENS',str(sens_index+1))
-        elif abs(R)/float(sens) < .2: #and abs(y)/float(sens) < .2:
-            lockin.write('SENS',str(sens_index-1))
+        # if abs(abs(R)-float(sens)) < .25*float(sens):
+        #     lockin.write('SENS',str(sens_index+1))
+        # elif abs(R)/float(sens) < .2: #and abs(y)/float(sens) < .2:
+        #     lockin.write('SENS',str(sens_index-1))
 
-        # if abs(RdB)-abs(sens) > 11:
-        #    lockin.write('SENS',str(sens_index-1))
-        # elif abs(RdB)-abs(sens) < 1:
-        #    lockin.write('SENS',str(sens_index+1))
+        if abs(RdB)-abs(sens) > 11:
+           lockin.write('SENS',str(sens_index-1))
+        elif abs(RdB)-abs(sens) < 1:
+           lockin.write('SENS',str(sens_index+1))
 
         try:
             db = 10*math.log10(X*X/0.050)
@@ -97,9 +109,9 @@ def sweep(start_voltage, sample):
             print (X)
 
         if PLOTLY:
-            plotly_stream(float(v_read),X,Y,R)
+            plotly_stream(float(voltage),X,Y,R)
         else:
-            update_plots(float(v_read),R,X,Y)
+            update_plots(float(voltage),R,X,Y)
 
         end = time.time()
 
@@ -109,6 +121,18 @@ def sweep(start_voltage, sample):
         data['Time'].append(end-start)
         # s.writerow([g +',', l+',',str(db)+',',str(sens)+',',tc+',',res_freq+',',amplitude+',',v_read+',',mod_amplitude+',',mod_frequency+',',end-start])
         # plt.pause(0.05)
+
+
+        ### Data storage for checking noise in sample
+        lockin.write('PAUS')
+        len_of_query = int(lockin.query('SPTS'))
+        r = lockin.query('TRCA','1,0,'+str(len_of_query-1))
+        r = r.split(',')
+        del r[-1]
+        rr = [float(j) for j in r]
+        data_2['R'] = data_2['R'] + rr
+        data_2['Voltage Magnet'] = data_2['Voltage Magnet'] + [voltage for i in xrange(len(rr))]
+        lockin.write('REST')
         time.sleep(0.95*WAIT_TIME)
 
     frame = pd.DataFrame(data)
@@ -130,6 +154,10 @@ def sweep(start_voltage, sample):
     frame['mid point'] = pd.Series(frame['Voltage Magnet'][x.mid_point_index()])
 
     frame.to_csv(filename, index = False)
+
+
+    frame_2 = pd.DataFrame(data_2)
+    frame_2.to_csv(filename_2,index=False)
 
     power_supply.write('VOLT:OFFS',str(VOLTAGE_START))
     power_supply.write('OUTP','OFF')
